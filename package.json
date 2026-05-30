@@ -1,0 +1,12 @@
+{
+  "name": "fgs-console",
+  "private": true,
+  "packageManager": "pnpm@10.11.0",
+  "engines": { "node": ">=22" },
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "scripts": {
+    "dev": "pnpm --filter @fgs-console/web dev",
+    "build": "pnpm --filter @fgs-console/web build",
+    "typecheck": "pnpm --filter @fgs-console/web exec tsc -b"
+  }
+}
