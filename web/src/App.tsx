@@ -171,7 +171,7 @@ export default function App() {
             fontFamily: 'var(--font-body)',
           }}
         >
-          Sign in with Google
+          Sign in with GitHub
         </button>
         <a
           href="https://freegamestore.online"
