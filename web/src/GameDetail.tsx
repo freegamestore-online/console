@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { formatTimeAgo, type GameInfo, type QualityScore } from './App';
 
 const ORG = 'freegamestore-online';
+const ADMIN_URL = 'https://admin.freegamestore.online';
 
 interface DeployRun {
   id: number;
@@ -17,11 +18,13 @@ export default function GameDetail({
   games,
   quality,
   onBack,
+  onGameUpdated,
 }: {
   gameId: string;
   games: GameInfo[];
   quality: Map<string, QualityScore>;
   onBack: () => void;
+  onGameUpdated?: () => void;
 }) {
   const game = games.find((g) => g.id === gameId);
   const q = quality.get(gameId);
@@ -208,6 +211,9 @@ export default function GameDetail({
         <InfoRow label="Price" value="Free forever" />
       </Section>
 
+      {/* Game settings */}
+      <GameSettings gameId={gameId} game={game} onUpdated={onGameUpdated} />
+
       {/* Quick links */}
       <Section title="Quick links">
         <div className="flex gap-2 flex-wrap">
@@ -328,6 +334,101 @@ function InfoRow({
     </div>
   );
 }
+
+const CATEGORIES = [
+  'arcade', 'puzzle', 'board', 'card', 'strategy', 'action',
+  'racing', 'sports', 'trivia', 'simulation', 'educational', 'casual',
+  'brain-training', 'multiplayer',
+];
+
+function GameSettings({ gameId, game, onUpdated }: {
+  gameId: string;
+  game: { name: string; domain: string };
+  onUpdated?: () => void;
+}) {
+  const [name, setName] = useState(game.name);
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ ok?: boolean; error?: string } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // Load current metadata from registry via admin
+  useEffect(() => {
+    fetch(`${ADMIN_URL}/api/status`)
+      .then(r => r.ok ? r.json() : [])
+      .then((games: Array<Record<string, string>>) => {
+        const g = games.find(x => x.id === gameId);
+        if (g) {
+          if (g.description) setDescription(g.description as string);
+          if (g.category) setCategory(g.category as string);
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [gameId]);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const res = await fetch(`${ADMIN_URL}/api/games/${gameId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name, description, category }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      setStatus(data);
+      if (data.ok && onUpdated) onUpdated();
+    } catch (e) {
+      setStatus({ error: String(e) });
+    }
+    setSaving(false);
+  }, [gameId, name, description, category, onUpdated]);
+
+  if (!loaded) return null;
+
+  return (
+    <Section title="Settings">
+      <div className="flex flex-col gap-3">
+        <label style={{ fontSize: '0.85rem' }}>
+          <span style={{ color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Display name</span>
+          <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
+        </label>
+        <label style={{ fontSize: '0.85rem' }}>
+          <span style={{ color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Description</span>
+          <input value={description} onChange={e => setDescription(e.target.value)} style={inputStyle} placeholder="Short description" />
+        </label>
+        <label style={{ fontSize: '0.85rem' }}>
+          <span style={{ color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Category</span>
+          <select value={category} onChange={e => setCategory(e.target.value)} style={inputStyle}>
+            <option value="">—</option>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <div className="flex items-center gap-3">
+          <button onClick={save} disabled={saving} style={{ ...linkBtnStyle, opacity: saving ? 0.5 : 1 }}>
+            {saving ? 'Saving...' : 'Save changes'}
+          </button>
+          {status?.ok && <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>Saved</span>}
+          {status?.error && <span style={{ color: 'var(--error)', fontSize: '0.85rem' }}>{status.error}</span>}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '0.5rem 0.75rem',
+  background: 'var(--paper)',
+  border: '1px solid var(--line)',
+  borderRadius: '0.5rem',
+  color: 'var(--ink)',
+  fontFamily: 'var(--font-body)',
+  fontSize: '0.9rem',
+};
 
 const backStyle: React.CSSProperties = {
   background: 'none',
