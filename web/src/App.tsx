@@ -275,6 +275,13 @@ export default function App() {
             games={games}
             quality={quality}
             onBack={() => navigate('dashboard')}
+            onGameUpdated={() => {
+              // Re-fetch games to reflect updated metadata
+              fetch(`${ADMIN_URL}/api/status`, { credentials: 'include' })
+                .then(r => r.ok ? r.json() : [])
+                .then((g: GameInfo[]) => setGames(g))
+                .catch(() => {});
+            }}
           />
         )}
         {route.view === 'settings' && (
