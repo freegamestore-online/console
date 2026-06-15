@@ -193,14 +193,14 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', background: 'var(--paper)' }}>
-      {/* Brand bar */}
+      {/* Brand bar — hidden on mobile when in chat (chat toolbar has back + settings) */}
       <header
+        className={view === 'chat' ? 'hidden md:flex' : 'flex'}
         style={{
           background: 'var(--panel)',
           borderBottom: '1px solid var(--line)',
           padding: '0 1rem',
           height: 44,
-          display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexShrink: 0,
