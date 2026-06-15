@@ -192,7 +192,7 @@ export default function App() {
   const activeTab = view === 'game-detail' ? 'dashboard' : view === 'chat' ? 'vibecode' : view;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', background: 'var(--paper)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: view === 'chat' ? '100dvh' : undefined, minHeight: view === 'chat' ? undefined : '100dvh', overflow: view === 'chat' ? 'hidden' : undefined, background: 'var(--paper)' }}>
       {/* Brand bar — hidden on mobile when in chat (chat toolbar has back + settings) */}
       <header
         className={view === 'chat' ? 'hidden md:flex' : 'flex'}
