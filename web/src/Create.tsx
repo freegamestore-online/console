@@ -5,6 +5,7 @@ import { getKey, getDefaultProvider, getDefaultModel, MODEL_OPTIONS, PROVIDERS }
 
 const AGENT_URL = 'https://agent.freegamestore.online';
 const PUBLISH_URL = 'https://publish.freegamestore.online';
+const GH_ORG = 'freegamestore-online';
 const PROJECTS_KEY = 'fgs_projects';
 
 interface Project {
@@ -108,7 +109,9 @@ export function Create({ sessionId, initialGameId, onNavigate, onBack, onProfile
     });
   };
 
-  // Auto-resolve initialGameId: find existing session or create one
+  // Auto-resolve initialGameId: find existing session or create one.
+  // For existing games, fetch the source and inject it as context so the
+  // agent knows what it's editing (it starts with a blank template otherwise).
   useEffect(() => {
     if (!initialGameId || sessionId) return;
     const existing = projects.find((p) => p.gameId === initialGameId);
@@ -118,6 +121,8 @@ export function Create({ sessionId, initialGameId, onNavigate, onBack, onProfile
       const id = crypto.randomUUID();
       const project: Project = { id, name: initialGameId, createdAt: new Date().toISOString(), gameId: initialGameId, gameUrl: `https://${initialGameId}.freegamestore.online`, deployed: true };
       setProjects((prev) => [project, ...prev]);
+      // Fetch existing source and prime the agent session
+      importGameSource(id, initialGameId);
       onNavigate(id);
     }
   }, [initialGameId]);
@@ -181,6 +186,32 @@ export function Create({ sessionId, initialGameId, onNavigate, onBack, onProfile
     const behavior = messages.length <= 2 ? 'instant' : 'smooth';
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: behavior as ScrollBehavior }), 50);
   }, [messages]);
+
+  async function importGameSource(sessionId: string, gameId: string) {
+    try {
+      // Fetch the game's App.tsx from GitHub (public repos, no auth needed)
+      const res = await fetch(
+        `https://api.github.com/repos/${GH_ORG}/${gameId}/contents/web/src/App.tsx`,
+        { headers: { Accept: 'application/vnd.github.raw+json', 'User-Agent': 'fgs-console' } },
+      );
+      if (!res.ok) return;
+      const source = await res.text();
+      // Send it as context to the agent so it knows what game it's editing
+      const apiKey = getKey(provider);
+      if (!apiKey) return;
+      await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `I want to edit an existing game called "${gameId}" at ${gameId}.freegamestore.online.\n\nHere is the current web/src/App.tsx:\n\n\`\`\`tsx\n${source}\n\`\`\`\n\nUse push_update (not deploy) for any changes to this game. The game ID is "${gameId}".`,
+          aiConfig: { provider, model, apiKey, temperature: 0.7, maxTokens: 16384 },
+        }),
+      });
+      // Don't stream this — it's just context injection. The response is discarded.
+    } catch {
+      // Import failed — agent will start with blank template. User can paste code manually.
+    }
+  }
 
   function createProject(name?: string): string {
     const id = crypto.randomUUID();
