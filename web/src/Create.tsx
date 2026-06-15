@@ -107,6 +107,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
   const isStreamingRef = useRef(false);
   const inputRef = useRef(inputValue);
   inputRef.current = inputValue;
+  const importedSourceRef = useRef<{ gameId: string; source: string } | null>(null);
 
   // Single persistence wrapper — no separate useEffect
   const setProjects = (updater: Project[] | ((prev: Project[]) => Project[])) => {
@@ -118,8 +119,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
   };
 
   // Auto-resolve initialGameId: find existing session or create one.
-  // For existing games, fetch the source and inject it as context so the
-  // agent knows what it's editing (it starts with a blank template otherwise).
+  // Fetches existing source from GitHub and shows it as context in the chat.
   useEffect(() => {
     if (!initialGameId || sessionId) return;
     const existing = projects.find((p) => p.gameId === initialGameId);
@@ -129,8 +129,8 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
       const id = crypto.randomUUID();
       const project: Project = { id, name: initialGameId, createdAt: new Date().toISOString(), gameId: initialGameId, gameUrl: `https://${initialGameId}.freegamestore.online`, deployed: true };
       setProjects((prev) => [project, ...prev]);
-      // Fetch existing source and prime the agent session
-      importGameSource(id, initialGameId);
+      // Fetch source from GitHub — will be shown as context + prepended to first message
+      fetchGameSource(initialGameId);
       onNavigate(id);
     }
   }, [initialGameId]);
@@ -195,29 +195,22 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: behavior as ScrollBehavior }), 50);
   }, [messages]);
 
-  async function importGameSource(sessionId: string, gameId: string) {
+  async function fetchGameSource(gameId: string) {
     try {
-      // Fetch the game's App.tsx from GitHub (public repos, no auth needed)
       const res = await fetch(
         `https://api.github.com/repos/${GH_ORG}/${gameId}/contents/web/src/App.tsx`,
         { headers: { Accept: 'application/vnd.github.raw+json', 'User-Agent': 'fgs-console' } },
       );
       if (!res.ok) return;
       const source = await res.text();
-      // Send it as context to the agent so it knows what game it's editing
-      const apiKey = getKey(provider);
-      if (!apiKey) return;
-      await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `I want to edit an existing game called "${gameId}" at ${gameId}.freegamestore.online.\n\nHere is the current web/src/App.tsx:\n\n\`\`\`tsx\n${source}\n\`\`\`\n\nUse push_update (not deploy) for any changes to this game. The game ID is "${gameId}".`,
-          aiConfig: { provider, model, apiKey, temperature: 0.7, maxTokens: 16384 },
-        }),
-      });
-      // Don't stream this — it's just context injection. The response is discarded.
+      importedSourceRef.current = { gameId, source };
+      // Show the loaded source as context in the chat UI
+      setMessages([
+        { role: 'system', content: `Editing ${gameId}.freegamestore.online — source loaded. Describe your changes.` },
+        { role: 'tool', content: `Loaded web/src/App.tsx (${source.length} chars) from ${gameId}` },
+      ]);
     } catch {
-      // Import failed — agent will start with blank template. User can paste code manually.
+      // Failed to fetch — user can still chat, agent will start from template
     }
   }
 
@@ -245,6 +238,15 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
       return;
     }
 
+    // On first message, prepend imported source so the agent has context
+    let fullMsg = msg;
+    const imported = importedSourceRef.current;
+    if (imported) {
+      const gameId = imported.gameId;
+      fullMsg = `I want to edit the existing game "${gameId}" at ${gameId}.freegamestore.online. Use push_update (not deploy) for changes. Game ID: "${gameId}".\n\nCurrent web/src/App.tsx:\n\`\`\`tsx\n${imported.source}\n\`\`\`\n\nMy request: ${msg}`;
+      importedSourceRef.current = null; // Only prepend once
+    }
+
     setInputValue('');
     isStreamingRef.current = true;
     setIsStreaming(true);
@@ -268,7 +270,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
       const res = await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, aiConfig: { provider, model, apiKey, temperature: 0.7, maxTokens: 16384 } }),
+        body: JSON.stringify({ message: fullMsg, aiConfig: { provider, model, apiKey, temperature: 0.7, maxTokens: 16384 } }),
       });
 
       if (!res.ok) {
