@@ -13,18 +13,28 @@ interface DeployRun {
   name: string;
 }
 
+const LEADERBOARD_URL = 'https://leaderboard.freegamestore.online';
+
+interface LeaderboardEntry {
+  user: string;
+  score: number;
+  updatedAt: string;
+}
+
 export default function GameDetail({
   gameId,
   games,
   quality,
   onBack,
   onGameUpdated,
+  onVibeCode,
 }: {
   gameId: string;
   games: GameInfo[];
   quality: Map<string, QualityScore>;
   onBack: () => void;
   onGameUpdated?: () => void;
+  onVibeCode?: () => void;
 }) {
   const game = games.find((g) => g.id === gameId);
   const q = quality.get(gameId);
@@ -101,10 +111,18 @@ export default function GameDetail({
             href={`https://github.com/${ORG}/${gameId}`}
             target="_blank"
             rel="noreferrer"
-            style={{ ...linkBtnStyle, background: 'var(--panel-hover)' }}
+            style={{ ...linkBtnStyle, background: 'var(--panel-hover)', color: 'var(--ink)' }}
           >
             Source
           </a>
+          {onVibeCode && (
+            <button
+              onClick={onVibeCode}
+              style={{ ...linkBtnStyle, background: 'var(--panel-hover)', color: 'var(--ink)', border: 'none', cursor: 'pointer' }}
+            >
+              Edit in VibeCode
+            </button>
+          )}
         </div>
       </div>
 
@@ -210,6 +228,9 @@ export default function GameDetail({
         <InfoRow label="License" value="MIT" />
         <InfoRow label="Price" value="Free forever" />
       </Section>
+
+      {/* Leaderboard */}
+      <LeaderboardPreview gameId={gameId} />
 
       {/* Game settings */}
       <GameSettings gameId={gameId} game={game} onUpdated={onGameUpdated} />
@@ -332,6 +353,45 @@ function InfoRow({
         <span style={{ color: 'var(--ink)' }}>{value}</span>
       )}
     </div>
+  );
+}
+
+function LeaderboardPreview({ gameId }: { gameId: string }) {
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${LEADERBOARD_URL}/api/scores/${gameId}?limit=5`)
+      .then((r) => (r.ok ? r.json() : { scores: [] }))
+      .then((data: { scores: LeaderboardEntry[] }) => setEntries(data.scores || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [gameId]);
+
+  return (
+    <Section title="Leaderboard">
+      {loading ? (
+        <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Loading...</p>
+      ) : entries.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>No scores yet. Players submit scores via the SDK's useScore hook.</p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {entries.map((e, i) => (
+            <div
+              key={e.user}
+              className="flex items-center justify-between"
+              style={{ padding: '0.35rem 0', borderBottom: i < entries.length - 1 ? '1px solid var(--line)' : 'none', fontSize: '0.85rem' }}
+            >
+              <div className="flex items-center gap-2">
+                <span style={{ color: 'var(--muted)', fontWeight: 700, width: 20, textAlign: 'right' }}>{i + 1}</span>
+                <span style={{ color: 'var(--ink)' }}>{e.user}</span>
+              </div>
+              <span style={{ fontWeight: 700, color: 'var(--accent)', fontFamily: 'monospace' }}>{e.score.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
   );
 }
 
