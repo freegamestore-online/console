@@ -76,15 +76,23 @@ function restoreMessages(serverMessages: any[]): Message[] {
   return restored;
 }
 
+interface QualityScore {
+  id: string;
+  score: number;
+  loadTimeMs: number;
+}
+
 interface CreateProps {
   sessionId: string | null;
   initialGameId?: string | null;
+  quality?: Map<string, QualityScore>;
   onNavigate: (sessionId: string) => void;
+  onGameDetail?: (gameId: string) => void;
   onBack: () => void;
   onProfile: () => void;
 }
 
-export function Create({ sessionId, initialGameId, onNavigate, onBack, onProfile }: CreateProps) {
+export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDetail, onBack, onProfile }: CreateProps) {
   const [projects, setProjectsRaw] = useState<Project[]>(loadProjects);
   const [messages, setMessages] = useState<Message[]>(DEFAULT_MSGS);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -394,7 +402,7 @@ export function Create({ sessionId, initialGameId, onNavigate, onBack, onProfile
 
   // ── Session list view ──
   if (!sessionId) {
-    return <SessionList projects={projects} provider={provider} onNavigate={onNavigate} onCreate={() => { const id = createProject(); onNavigate(id); }} onDelete={deleteProject} onProfile={onProfile} />;
+    return <SessionList projects={projects} provider={provider} quality={quality} onNavigate={onNavigate} onGameDetail={onGameDetail} onCreate={() => { const id = createProject(); onNavigate(id); }} onDelete={deleteProject} onProfile={onProfile} />;
   }
 
   // ── Chat view ──
@@ -630,14 +638,18 @@ function copyConversation(messages: Message[]) {
 function SessionList({
   projects,
   provider,
+  quality,
   onNavigate,
+  onGameDetail,
   onCreate,
   onDelete,
   onProfile,
 }: {
   projects: Project[];
   provider: string;
+  quality?: Map<string, QualityScore>;
   onNavigate: (id: string) => void;
+  onGameDetail?: (gameId: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
   onProfile: () => void;
@@ -660,7 +672,7 @@ function SessionList({
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '1.5rem 1rem', width: '100%' }}>
       <div className="flex items-center justify-between" style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', color: 'var(--ink-strong)' }}>VibeCode</h1>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', color: 'var(--ink-strong)' }}>My Games</h1>
         <button onClick={onCreate} style={accentBtnStyle}>
           + New Game
         </button>
@@ -708,7 +720,7 @@ function SessionList({
               <h2 style={sectionLabel}>Drafts ({drafts.length})</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '0.75rem' }}>
                 {drafts.map((p) => (
-                  <ProjectCard key={p.id} project={p} onClick={() => onNavigate(p.id)} onDelete={() => onDelete(p.id)} />
+                  <ProjectCard key={p.id} project={p} quality={p.gameId ? quality?.get(p.gameId) : undefined} onClick={() => onNavigate(p.id)} onGameDetail={p.gameId && onGameDetail ? () => onGameDetail(p.gameId!) : undefined} onDelete={() => onDelete(p.id)} />
                 ))}
               </div>
             </div>
@@ -718,7 +730,7 @@ function SessionList({
               <h2 style={sectionLabel}>Deployed ({deployed.length})</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '0.75rem' }}>
                 {deployed.map((p) => (
-                  <ProjectCard key={p.id} project={p} onClick={() => onNavigate(p.id)} onDelete={() => onDelete(p.id)} />
+                  <ProjectCard key={p.id} project={p} quality={p.gameId ? quality?.get(p.gameId) : undefined} onClick={() => onNavigate(p.id)} onGameDetail={p.gameId && onGameDetail ? () => onGameDetail(p.gameId!) : undefined} onDelete={() => onDelete(p.id)} />
                 ))}
               </div>
             </div>
@@ -732,7 +744,13 @@ function SessionList({
   );
 }
 
-function ProjectCard({ project, onClick, onDelete }: { project: Project; onClick: () => void; onDelete: () => void }) {
+function ProjectCard({ project, quality, onClick, onGameDetail, onDelete }: {
+  project: Project;
+  quality?: QualityScore;
+  onClick: () => void;
+  onGameDetail?: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div
       style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '1rem', cursor: 'pointer', transition: 'border-color 0.15s' }}
@@ -743,35 +761,33 @@ function ProjectCard({ project, onClick, onDelete }: { project: Project; onClick
       <div className="flex items-center justify-between" style={{ marginBottom: '0.25rem' }}>
         <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--ink-strong)' }}>{project.name}</span>
         <div className="flex items-center gap-2">
+          {quality && (
+            <span style={{ fontWeight: 700, fontSize: '0.8rem', color: quality.score >= 95 ? 'var(--success)' : quality.score >= 60 ? 'var(--warning)' : 'var(--error)' }}>
+              {quality.score}
+            </span>
+          )}
           {project.deployed && (
-            <span
-              style={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                color: 'var(--success)',
-                padding: '0.15rem 0.5rem',
-                borderRadius: '999px',
-                background: 'color-mix(in srgb, var(--success) 14%, transparent)',
-              }}
-            >
+            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--success)', padding: '0.1rem 0.4rem', borderRadius: '999px', background: 'color-mix(in srgb, var(--success) 14%, transparent)' }}>
               Live
             </span>
           )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            title="Delete session"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '1rem', padding: '0.25rem', lineHeight: 1 }}
-          >
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete session"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '1rem', padding: '0.25rem', lineHeight: 1 }}>
             &#215;
           </button>
         </div>
       </div>
-      <p style={{ color: 'var(--muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
-        {project.gameId ? `${project.gameId}.freegamestore.online` : 'Draft'}
-      </p>
+      <div className="flex items-center justify-between">
+        <p style={{ color: 'var(--muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
+          {project.gameId ? `${project.gameId}.freegamestore.online` : 'Draft'}
+        </p>
+        {onGameDetail && (
+          <button onClick={(e) => { e.stopPropagation(); onGameDetail(); }}
+            style={{ fontSize: '0.7rem', color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem' }}>
+            Details
+          </button>
+        )}
+      </div>
     </div>
   );
 }

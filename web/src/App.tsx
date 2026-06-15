@@ -26,11 +26,10 @@ interface QualityScore {
   loadTimeMs: number;
 }
 
-type View = 'dashboard' | 'game-detail' | 'vibecode' | 'chat' | 'profile';
+type View = 'games' | 'game-detail' | 'chat' | 'profile';
 
 const TABS: { key: View; label: string }[] = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'vibecode', label: 'VibeCode' },
+  { key: 'games', label: 'My Games' },
   { key: 'profile', label: 'Profile' },
 ];
 
@@ -40,9 +39,8 @@ function parseRoute(): { view: View; id: string | null } {
   if (gameMatch) return { view: 'game-detail', id: gameMatch[1]! };
   const chatMatch = path.match(/^\/create\/([^/]+)/);
   if (chatMatch) return { view: 'chat', id: chatMatch[1]! };
-  if (path === '/create') return { view: 'vibecode', id: null };
   if (path === '/profile') return { view: 'profile', id: null };
-  return { view: 'dashboard', id: null };
+  return { view: 'games', id: null };
 }
 
 const routeSetterRef: { current: ((r: { view: View; id: string | null }) => void) | null } = { current: null };
@@ -51,7 +49,6 @@ function navigate(view: View, id?: string) {
   let path = '/';
   if (view === 'game-detail' && id) path = `/games/${id}`;
   else if (view === 'chat' && id) path = `/create/${id}`;
-  else if (view === 'vibecode') path = '/create';
   else if (view === 'profile') path = '/profile';
   history.pushState(null, '', path);
   routeSetterRef.current?.(parseRoute());
@@ -124,10 +121,10 @@ export default function App() {
     loadGames();
   }, [loadGames]);
 
-  // Re-fetch games when navigating to dashboard (catches VibeCode deploys)
+  // Re-fetch games when navigating to My Games (catches deploys)
   const { view, id } = route;
   useEffect(() => {
-    if (view === 'dashboard') loadGamesRef.current();
+    if (view === 'games') loadGamesRef.current();
   }, [view]);
 
   const signIn = useCallback(() => {
@@ -189,7 +186,7 @@ export default function App() {
   }
 
   const showTabs = view !== 'chat';
-  const activeTab = view === 'game-detail' ? 'dashboard' : view === 'chat' ? 'vibecode' : view;
+  const activeTab = view === 'game-detail' ? 'games' : view === 'chat' ? 'games' : view;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: view === 'chat' ? '100dvh' : undefined, minHeight: view === 'chat' ? undefined : '100dvh', overflow: view === 'chat' ? 'hidden' : undefined, background: 'var(--paper)' }}>
@@ -208,7 +205,7 @@ export default function App() {
       >
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('dashboard')}
+            onClick={() => navigate('games')}
             style={{
               background: 'none',
               border: 'none',
@@ -268,127 +265,25 @@ export default function App() {
       )}
 
       {/* Content */}
-      {view === 'vibecode' || view === 'chat' ? (
+      {view === 'games' || view === 'chat' ? (
         <Create
           sessionId={view === 'chat' ? id : null}
           initialGameId={vibeCodeGameId}
+          quality={quality}
           onNavigate={(sid) => { setVibeCodeGameId(null); navigate('chat', sid); }}
-          onBack={() => navigate('vibecode')}
+          onGameDetail={(gid) => navigate('game-detail', gid)}
+          onBack={() => navigate('games')}
           onProfile={() => navigate('profile')}
         />
       ) : (
         <main style={{ flex: 1, maxWidth: 960, margin: '0 auto', padding: '1.5rem 1rem', width: '100%' }}>
-          {view === 'dashboard' && <Dashboard user={user} games={games} quality={quality} onGameClick={(gid) => navigate('game-detail', gid)} />}
           {view === 'game-detail' && id && (
-            <GameDetail gameId={id} games={games} quality={quality} onBack={() => navigate('dashboard')} onGameUpdated={loadGames} onVibeCode={() => { setVibeCodeGameId(id!); history.replaceState(null, '', '/create'); routeSetterRef.current?.({ view: 'vibecode', id: null }); }} />
+            <GameDetail gameId={id} games={games} quality={quality} onBack={() => navigate('games')} onGameUpdated={loadGames} onVibeCode={() => { setVibeCodeGameId(id!); history.replaceState(null, '', '/'); routeSetterRef.current?.({ view: 'games', id: null }); }} />
           )}
           {view === 'profile' && <Profile theme={theme} onThemeChange={applyTheme} />}
         </main>
       )}
     </div>
-  );
-}
-
-// ── Dashboard ──
-
-function Dashboard({
-  user,
-  games,
-  quality,
-  onGameClick,
-}: {
-  user: User;
-  games: GameInfo[];
-  quality: Map<string, QualityScore>;
-  onGameClick: (id: string) => void;
-}) {
-  return (
-    <>
-      <div className="flex items-center gap-3" style={{ marginBottom: '2rem' }}>
-        <img src={user.avatar} alt="" width={48} height={48} style={{ borderRadius: '50%' }} />
-        <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', color: 'var(--ink-strong)', lineHeight: 1.2 }}>
-            Welcome, {user.name.split(' ')[0]}
-          </h1>
-          <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-            {games.length} game{games.length !== 1 ? 's' : ''} on the platform
-          </p>
-        </div>
-      </div>
-
-      {games.length === 0 ? (
-        <div
-          style={{
-            background: 'var(--panel)',
-            border: '1px solid var(--line)',
-            borderRadius: 'var(--radius)',
-            padding: '2rem',
-            textAlign: 'center',
-          }}
-        >
-          <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>No published games yet. Build one with VibeCode or the CLI.</p>
-          <button
-            onClick={() => navigate('vibecode')}
-            style={{
-              display: 'inline-block',
-              background: 'var(--accent)',
-              color: '#fff',
-              padding: '0.5rem 1.5rem',
-              borderRadius: 'var(--radius)',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              border: 'none',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-body)',
-            }}
-          >
-            Open VibeCode
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '1rem' }}>
-          {games.map((g) => {
-            const q = quality.get(g.id);
-            return (
-              <button
-                key={g.id}
-                onClick={() => onGameClick(g.id)}
-                style={{
-                  background: 'var(--panel)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 'var(--radius)',
-                  padding: '1rem 1.25rem',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  boxShadow: 'var(--shadow-card)',
-                  fontFamily: 'var(--font-body)',
-                  transition: 'border-color 0.15s',
-                }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--line)')}
-              >
-                <div className="flex items-center justify-between" style={{ marginBottom: '0.35rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--ink-strong)' }}>{g.name}</span>
-                  {q && (
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        color: q.score >= 95 ? 'var(--success)' : q.score >= 60 ? 'var(--warning)' : 'var(--error)',
-                      }}
-                    >
-                      {q.score}
-                    </span>
-                  )}
-                </div>
-                <p style={{ color: 'var(--muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>{g.domain}</p>
-                <DeployBadge gameId={g.id} />
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </>
   );
 }
 
@@ -536,48 +431,6 @@ function ProviderKeyCard({ provider }: { provider: ProviderConfig }) {
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Deploy badge ──
-
-function DeployBadge({ gameId }: { gameId: string }) {
-  const [status, setStatus] = useState<{ conclusion: string; updatedAt: string } | null>(null);
-
-  useEffect(() => {
-    fetch(`https://api.github.com/repos/freegamestore-online/${gameId}/actions/runs?per_page=1&status=completed`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        const run = data?.workflow_runs?.[0];
-        if (run) setStatus({ conclusion: run.conclusion, updatedAt: run.updated_at });
-      })
-      .catch(() => {});
-  }, [gameId]);
-
-  if (!status) return null;
-  const isSuccess = status.conclusion === 'success';
-  return (
-    <div className="flex items-center gap-1.5" style={{ marginTop: '0.35rem' }}>
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          fontSize: '0.65rem',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          padding: '0.15rem 0.4rem',
-          borderRadius: '999px',
-          background: isSuccess ? 'var(--success)' : 'var(--error)',
-          color: 'white',
-        }}
-      >
-        {isSuccess ? 'Live' : 'Failed'}
-      </span>
-      <span style={{ fontSize: '0.65rem', color: 'var(--muted)' }}>{formatTimeAgo(status.updatedAt)}</span>
     </div>
   );
 }
