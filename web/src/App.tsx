@@ -185,12 +185,11 @@ export default function App() {
     );
   }
 
-  const showTabs = view !== 'chat';
   const activeTab = view === 'game-detail' ? 'games' : view === 'chat' ? 'games' : view;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: view === 'chat' ? '100dvh' : undefined, minHeight: view === 'chat' ? undefined : '100dvh', overflow: view === 'chat' ? 'hidden' : undefined, background: 'var(--paper)' }}>
-      {/* Brand bar — hidden on mobile when in chat (chat toolbar has back + settings) */}
+      {/* Header — single bar: tabs + store link + avatar + sign out. Hidden on mobile in chat. */}
       <header
         className={view === 'chat' ? 'hidden md:flex' : 'flex'}
         style={{
@@ -203,66 +202,41 @@ export default function App() {
           flexShrink: 0,
         }}
       >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('games')}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-display)',
-              fontSize: '1rem',
-              fontWeight: 800,
-              color: 'var(--ink-strong)',
-              padding: 0,
-            }}
-          >
-            Console
-          </button>
-          <span style={{ color: 'var(--line-strong)' }}>&#183;</span>
-          <a href="https://freegamestore.online" style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
-            Store
-          </a>
+        <div className="flex items-center gap-0">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => navigate(tab.key)}
+              style={{
+                padding: '0 0.75rem',
+                fontSize: '0.85rem',
+                fontWeight: activeTab === tab.key ? 700 : 500,
+                background: 'none',
+                border: 'none',
+                color: activeTab === tab.key ? 'var(--ink-strong)' : 'var(--muted)',
+                cursor: 'pointer',
+                fontFamily: activeTab === tab.key ? 'var(--font-display)' : 'var(--font-body)',
+                height: 44,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
         <div className="flex items-center gap-3">
+          <a href="https://freegamestore.online" style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+            Store
+          </a>
           <img src={user.avatar} alt="" width={24} height={24} style={{ borderRadius: '50%' }} />
           <button
             onClick={signOut}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--muted)', fontFamily: 'var(--font-body)' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--muted)', fontFamily: 'var(--font-body)' }}
           >
             Sign out
           </button>
         </div>
       </header>
-
-      {/* Tab bar */}
-      {showTabs && (
-        <nav style={{ borderBottom: '1px solid var(--line)', background: 'var(--panel)', flexShrink: 0 }}>
-          <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', gap: 0, padding: '0 1rem' }}>
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => navigate(tab.key)}
-                style={{
-                  padding: '0.6rem 0.75rem',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === tab.key ? '2px solid var(--accent)' : '2px solid transparent',
-                  color: activeTab === tab.key ? 'var(--ink)' : 'var(--muted)',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-body)',
-                  minHeight: 40,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </nav>
-      )}
 
       {/* Content */}
       {view === 'games' || view === 'chat' ? (
