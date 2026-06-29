@@ -145,7 +145,7 @@ function Shell() {
             fontFamily: 'var(--font-body)',
           }}
         >
-          Sign in with Google
+          Sign in with GitHub
         </button>
         <a href="https://freegamestore.online" style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
           &#8592; Back to store
