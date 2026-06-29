@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/create.tsx","./src/gamedetail.tsx","./src/main.tsx","./src/components/chatmessage.tsx","./src/components/deploylog.tsx","./src/components/markdown.tsx","./src/lib/ai-keys.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/create.tsx","./src/gamedetail.tsx","./src/main.tsx","./src/components/chatmessage.tsx","./src/components/deploylog.tsx","./src/components/markdown.tsx","./src/components/nav.tsx","./src/hooks/useauth.ts","./src/lib/ai-keys.ts","./src/lib/theme.ts"],"version":"5.9.3"}

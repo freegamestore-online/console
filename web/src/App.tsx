@@ -2,15 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import GameDetail from './GameDetail';
 import { Create } from './Create';
 import { getKey, saveKey, PROVIDERS, type ProviderConfig } from './lib/ai-keys';
+import { AuthContext, useAuth, useAuthProvider } from './hooks/useAuth';
+import { useTheme } from './lib/theme';
+import { Nav } from './components/Nav';
 
-const AUTH_URL = 'https://auth.freegamestore.online';
 const ADMIN_URL = 'https://admin.freegamestore.online';
-
-interface User {
-  id: string;
-  name: string;
-  avatar: string;
-}
 
 interface GameInfo {
   id: string;
@@ -61,15 +57,20 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const auth = useAuthProvider();
+  return (
+    <AuthContext.Provider value={auth}>
+      <Shell />
+    </AuthContext.Provider>
+  );
+}
+
+function Shell() {
+  const { user, loading, signIn } = useAuth();
   const [route, setRoute] = useState(parseRoute);
   const [games, setGames] = useState<GameInfo[]>([]);
   const [quality, setQuality] = useState<Map<string, QualityScore>>(new Map());
-  const [theme, setTheme] = useState(() => localStorage.getItem('stores-theme') ?? 'system');
   const [vibeCodeGameId, setVibeCodeGameId] = useState<string | null>(null);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const avatarRef = useRef<HTMLDivElement>(null);
   const loadGamesRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -80,25 +81,6 @@ export default function App() {
     const handler = () => setRoute(parseRoute());
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
-  }, []);
-
-  // Close avatar menu when clicking outside it
-  useEffect(() => {
-    if (!avatarMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [avatarMenuOpen]);
-
-  // Auth
-  useEffect(() => {
-    fetch(`${AUTH_URL}/me`, { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((u: User | null) => setUser(u))
-      .catch(() => {})
-      .finally(() => setLoading(false));
   }, []);
 
   // Fetch games + quality
@@ -133,31 +115,6 @@ export default function App() {
   useEffect(() => {
     if (view === 'games') loadGamesRef.current();
   }, [view]);
-
-  const signIn = useCallback(() => {
-    window.location.href = `${AUTH_URL}/login?redirect=${encodeURIComponent(window.location.href)}`;
-  }, []);
-
-  const signOut = useCallback(() => {
-    fetch(`${AUTH_URL}/logout`, { method: 'POST', credentials: 'include' })
-      .catch(() => {})
-      .finally(() => {
-        setUser(null);
-        window.location.reload();
-      });
-  }, []);
-
-  const applyTheme = (t: string) => {
-    setTheme(t);
-    localStorage.setItem('stores-theme', t);
-    const isDark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.dataset.theme = isDark ? 'dark' : '';
-  };
-
-  const cycleTheme = () => {
-    const order = ['system', 'light', 'dark'];
-    applyTheme(order[(order.indexOf(theme) + 1) % order.length]!);
-  };
 
   if (loading) {
     return (
@@ -201,78 +158,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: view === 'chat' ? '100dvh' : undefined, minHeight: view === 'chat' ? undefined : '100dvh', overflow: view === 'chat' ? 'hidden' : undefined, background: 'var(--paper)' }}>
-      {/* Header — single bar: tabs + store link + avatar + sign out. Hidden on mobile in chat. */}
-      <header
-        className={view === 'chat' ? 'hidden md:flex' : 'flex'}
-        style={{
-          background: 'var(--panel)',
-          borderBottom: '1px solid var(--line)',
-          padding: '0 1rem',
-          height: 44,
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
-        }}
-      >
-        {/* Brand */}
-        <button
-          onClick={() => navigate('games')}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--ink-strong)' }}
-        >
-          Free<span style={{ color: 'var(--accent)' }}>GameStore</span>
-        </button>
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('games')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.82rem', fontWeight: activeTab === 'games' ? 700 : 500, color: activeTab === 'games' ? 'var(--ink)' : 'var(--muted)', fontFamily: 'var(--font-body)' }}
-          >
-            My Games
-          </button>
-          <a href="https://freegamestore.online" style={{ fontSize: '0.82rem', color: 'var(--muted)', fontFamily: 'var(--font-body)' }}>
-            Store
-          </a>
-          <button
-            onClick={cycleTheme}
-            title={`Theme: ${theme}`}
-            aria-label={`Theme: ${theme}`}
-            style={{ width: 30, height: 30, borderRadius: '999px', border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--ink)', cursor: 'pointer', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-          >
-            <span aria-hidden>{theme === 'dark' ? '☽' : theme === 'light' ? '☀︎' : '◑'}</span>
-          </button>
-
-          {/* Avatar + dropdown menu */}
-          <div ref={avatarRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setAvatarMenuOpen((o) => !o)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
-            >
-              <img src={user.avatar} alt={user.name} width={28} height={28} style={{ borderRadius: '50%', border: `2px solid ${avatarMenuOpen ? 'var(--accent)' : 'var(--line)'}` }} />
-            </button>
-            {avatarMenuOpen && (
-              <div style={{ position: 'absolute', right: 0, marginTop: 8, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '0.75rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', width: 200, zIndex: 100, padding: '0.4rem 0', overflow: 'hidden' }}>
-                <div style={{ padding: '0.5rem 0.85rem', borderBottom: '1px solid var(--line)' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Google</div>
-                </div>
-                <button
-                  onClick={() => { setAvatarMenuOpen(false); navigate('profile'); }}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.85rem', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--ink)', fontFamily: 'var(--font-body)' }}
-                >
-                  Profile
-                </button>
-                <div style={{ borderTop: '1px solid var(--line)', margin: '0.25rem 0' }} />
-                <button
-                  onClick={() => { setAvatarMenuOpen(false); signOut(); }}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.85rem', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--error)', fontFamily: 'var(--font-body)' }}
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <Nav active={activeTab === 'profile' ? 'profile' : 'games'} onNavigate={(v) => navigate(v)} showOnMobile={view !== 'chat'} />
 
       {/* Content */}
       {view === 'games' || view === 'chat' ? (
@@ -290,7 +176,7 @@ export default function App() {
           {view === 'game-detail' && id && (
             <GameDetail gameId={id} games={games} quality={quality} onBack={() => navigate('games')} onGameUpdated={loadGames} onVibeCode={() => { setVibeCodeGameId(id!); history.replaceState(null, '', '/'); routeSetterRef.current?.({ view: 'games', id: null }); }} />
           )}
-          {view === 'profile' && <Profile theme={theme} onThemeChange={applyTheme} />}
+          {view === 'profile' && <Profile />}
         </main>
       )}
     </div>
@@ -299,7 +185,8 @@ export default function App() {
 
 // ── Profile ──
 
-function Profile({ theme, onThemeChange }: { theme: string; onThemeChange: (t: string) => void }) {
+function Profile() {
+  const { pref, set } = useTheme();
   return (
     <>
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', color: 'var(--ink-strong)', marginBottom: '1.5rem' }}>Profile</h1>
@@ -319,16 +206,16 @@ function Profile({ theme, onThemeChange }: { theme: string; onThemeChange: (t: s
       {/* Theme */}
       <SectionCard title="Theme">
         <div className="flex gap-2">
-          {['system', 'light', 'dark'].map((t) => (
+          {(['system', 'light', 'dark'] as const).map((t) => (
             <button
               key={t}
-              onClick={() => onThemeChange(t)}
+              onClick={() => set(t)}
               style={{
                 padding: '0.5rem 1rem',
                 borderRadius: '0.5rem',
-                border: `1px solid ${theme === t ? 'var(--accent)' : 'var(--line)'}`,
-                background: theme === t ? 'var(--accent)' : 'var(--panel)',
-                color: theme === t ? '#fff' : 'var(--ink)',
+                border: `1px solid ${pref === t ? 'var(--accent)' : 'var(--line)'}`,
+                background: pref === t ? 'var(--accent)' : 'var(--panel)',
+                color: pref === t ? '#fff' : 'var(--ink)',
                 cursor: 'pointer',
                 fontFamily: 'var(--font-body)',
                 fontSize: '0.85rem',
