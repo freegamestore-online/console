@@ -129,6 +129,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
   const [provider, setProvider] = useState(getDefaultProvider);
   const [model, setModel] = useState(getDefaultModel);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [publishState, setPublishState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isStreamingRef = useRef(false);
   const inputRef = useRef(inputValue);
@@ -452,6 +453,23 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
   }
 
   const currentProject = projects.find((p) => p.id === sessionId);
+
+  // Publish to store (list on the storefront) via the publisher worker.
+  async function publishGame() {
+    if (!currentProject?.gameId) return;
+    setPublishState('busy');
+    try {
+      const r = await fetch(`${PUBLISH_URL}/api/publish`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentProject.gameId, name: currentProject.name }),
+      });
+      setPublishState(r.ok ? 'done' : 'error');
+    } catch {
+      setPublishState('error');
+    }
+  }
   const previewUrl =
     currentProject?.gameUrl ||
     (deployState?.phase === 'live' ? deployState.appUrl : null) ||
@@ -650,14 +668,14 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
                   {previewUrl.replace('https://', '')} &#8599;
                 </a>
                 {currentProject?.gameId && (
-                  <a
-                    href={`${PUBLISH_URL}?id=${currentProject.gameId}`}
-                    target="_blank"
-                    rel="noopener"
-                    style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem', borderRadius: '999px', background: 'var(--accent)', color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+                  <button
+                    onClick={publishGame}
+                    disabled={publishState === 'busy' || publishState === 'done'}
+                    title="List this game on the store"
+                    style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem', borderRadius: '999px', border: 'none', background: publishState === 'error' ? 'var(--error)' : 'var(--accent)', color: 'white', cursor: publishState === 'busy' || publishState === 'done' ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, opacity: publishState === 'busy' ? 0.7 : 1 }}
                   >
-                    Publish
-                  </a>
+                    {publishState === 'busy' ? 'Publishing…' : publishState === 'done' ? 'Published ✓' : publishState === 'error' ? 'Retry' : 'Publish'}
+                  </button>
                 )}
               </>
             ) : (
