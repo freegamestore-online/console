@@ -41,6 +41,32 @@ function persistProjects(projects: Project[]) {
   localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
 }
 
+// Server-side session index (cross-device). localStorage stays the offline
+// fallback; these calls are fire-and-forget so a failed sync never blocks the UI.
+async function fetchServerProjects(): Promise<Project[] | null> {
+  try {
+    const r = await fetch(`${AGENT_URL}/sessions`, { credentials: 'include' });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return Array.isArray(data.sessions) ? (data.sessions as Project[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function putServerProject(p: Project) {
+  fetch(`${AGENT_URL}/sessions/${p.id}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: p.name, gameId: p.gameId, gameUrl: p.gameUrl, deployed: p.deployed }),
+  }).catch(() => {});
+}
+
+function deleteServerProject(id: string) {
+  fetch(`${AGENT_URL}/sessions/${id}`, { method: 'DELETE', credentials: 'include' }).catch(() => {});
+}
+
 const DEFAULT_MSGS: Message[] = [{ role: 'system', content: 'Describe the game you want to build.' }];
 
 function toolLabel(tc: { name: string; input?: Record<string, unknown> }): string {
@@ -109,14 +135,43 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
   inputRef.current = inputValue;
   const importedSourceRef = useRef<{ gameId: string; source: string } | null>(null);
 
-  // Single persistence wrapper — no separate useEffect
+  // Single persistence wrapper — persists locally and syncs the diff to the server.
   const setProjects = (updater: Project[] | ((prev: Project[]) => Project[])) => {
     setProjectsRaw((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       persistProjects(next);
+      const prevById = new Map(prev.map((p) => [p.id, p]));
+      const nextIds = new Set(next.map((p) => p.id));
+      for (const p of next) {
+        const old = prevById.get(p.id);
+        if (!old || old.name !== p.name || old.gameId !== p.gameId || old.gameUrl !== p.gameUrl || old.deployed !== p.deployed) {
+          putServerProject(p);
+        }
+      }
+      for (const p of prev) if (!nextIds.has(p.id)) deleteServerProject(p.id);
       return next;
     });
   };
+
+  // On mount, pull the server-side session list and merge: server is the source
+  // of truth across devices; any local-only sessions get pushed up.
+  useEffect(() => {
+    let cancelled = false;
+    fetchServerProjects().then((server) => {
+      if (cancelled || !server) return;
+      setProjectsRaw((prev) => {
+        const serverIds = new Set(server.map((p) => p.id));
+        const localOnly = prev.filter((p) => !serverIds.has(p.id));
+        localOnly.forEach(putServerProject);
+        const merged = [...server, ...localOnly].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        persistProjects(merged);
+        return merged;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Auto-resolve initialGameId: find existing session or create one.
   // Fetches existing source from GitHub and shows it as context in the chat.
