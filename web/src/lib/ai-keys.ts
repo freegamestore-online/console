@@ -149,10 +149,42 @@ export async function hydrateKeysFromVault(): Promise<void> {
   }
 }
 
+/** First provider (in PROVIDERS order — OpenAI first) that has a key, or null. */
+export function firstProviderWithKey(): string | null {
+  for (const p of PROVIDERS) if (getKey(p.type)) return p.type;
+  return null;
+}
+
+/**
+ * Resolve a usable { provider, model, apiKey }. Prefers the requested provider,
+ * but falls back to ANY provider that has a key, so chat works as long as a key
+ * exists somewhere. Returns null only when no provider has any key.
+ */
+export function resolveActiveConfig(
+  preferredProvider: string,
+  preferredModel: string,
+): { provider: string; model: string; apiKey: string } | null {
+  const order = [preferredProvider, ...PROVIDERS.map((p) => p.type).filter((t) => t !== preferredProvider)];
+  for (const provider of order) {
+    const apiKey = getKey(provider);
+    if (!apiKey) continue;
+    const models = MODEL_OPTIONS[provider] || [];
+    const keepModel = provider === preferredProvider && models.some((m) => m.value === preferredModel);
+    const model = keepModel ? preferredModel : models[0]?.value || preferredModel;
+    return { provider, model, apiKey };
+  }
+  return null;
+}
+
 export function getDefaultProvider(): string {
   const stored = localStorage.getItem('fgs_provider');
-  if (stored && PROVIDERS.some((p) => p.type === stored)) return stored;
-  return 'openai';
+  // Honor an explicit choice only if it still has a key.
+  if (stored && PROVIDERS.some((p) => p.type === stored) && getKey(stored)) return stored;
+  // Otherwise default to whatever provider actually has a key.
+  const withKey = firstProviderWithKey();
+  if (withKey) return withKey;
+  // No keys yet — fall back to the stored choice or OpenAI (never OpenRouter by default).
+  return stored && PROVIDERS.some((p) => p.type === stored) ? stored : 'openai';
 }
 
 export function getDefaultModel(): string {

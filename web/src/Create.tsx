@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from './components/ChatMessage';
 import { DeployLog } from './components/DeployLog';
-import { getKey, getDefaultProvider, getDefaultModel, MODEL_OPTIONS, PROVIDERS } from './lib/ai-keys';
+import { getKey, getDefaultProvider, getDefaultModel, resolveActiveConfig, MODEL_OPTIONS, PROVIDERS } from './lib/ai-keys';
 
 const AGENT_URL = 'https://agent.freegamestore.online';
 const PUBLISH_URL = 'https://publish.freegamestore.online';
@@ -288,11 +288,15 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
     const msg = inputRef.current.trim();
     if (!msg || isStreamingRef.current || !sessionId) return;
 
-    const apiKey = getKey(provider);
-    if (!apiKey) {
+    // Use the selected provider if it has a key, otherwise any provider that does.
+    const cfg = resolveActiveConfig(provider, model);
+    if (!cfg) {
       setSettingsOpen(true);
       return;
     }
+    const { provider: activeProvider, model: activeModel, apiKey } = cfg;
+    if (activeProvider !== provider) setProvider(activeProvider);
+    if (activeModel !== model) setModel(activeModel);
 
     // On first message, prepend imported source so the agent has context
     let fullMsg = msg;
@@ -326,7 +330,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
       const res = await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: fullMsg, aiConfig: { provider, model, apiKey, temperature: 0.7, maxTokens: 16384 } }),
+        body: JSON.stringify({ message: fullMsg, aiConfig: { provider: activeProvider, model: activeModel, apiKey, temperature: 0.7, maxTokens: 16384 } }),
       });
 
       if (!res.ok) {
@@ -407,7 +411,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
           const retryRes = await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: 'continue where you left off', aiConfig: { provider, model, apiKey, temperature: 0.7, maxTokens: 16384 } }),
+            body: JSON.stringify({ message: 'continue where you left off', aiConfig: { provider: activeProvider, model: activeModel, apiKey, temperature: 0.7, maxTokens: 16384 } }),
           });
           if (retryRes.ok) {
             const retryReader = retryRes.body!.getReader();
@@ -481,7 +485,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
   }
 
   // ── Chat view ──
-  const hasKey = !!getKey(provider);
+  const hasKey = !!resolveActiveConfig(provider, model);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
@@ -573,7 +577,7 @@ export function Create({ sessionId, initialGameId, quality, onNavigate, onGameDe
           </div>
           {!hasKey && (
             <p style={{ color: 'var(--warning)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-              No API key for {PROVIDERS.find((p) => p.type === provider)?.name}.{' '}
+              No API key yet — add any provider's key and chat just works.{' '}
               <button onClick={onProfile} style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.8rem' }}>
                 Add one in Profile
               </button>
