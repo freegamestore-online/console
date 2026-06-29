@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import GameDetail from './GameDetail';
 import { Create } from './Create';
-import { getKey, saveKey, PROVIDERS, type ProviderConfig } from './lib/ai-keys';
+import { getKey, saveKey, PROVIDERS, vaultProviders, vaultSet, vaultDelete, hydrateKeysFromVault, type ProviderConfig } from './lib/ai-keys';
 import { AuthContext, useAuth, useAuthProvider } from './hooks/useAuth';
 import { useTheme } from './lib/theme';
 import { Nav } from './components/Nav';
@@ -76,6 +76,11 @@ function Shell() {
   useEffect(() => {
     routeSetterRef.current = setRoute;
   }, []);
+
+  // Pull encrypted AI keys down from the vault once signed in.
+  useEffect(() => {
+    if (user) hydrateKeysFromVault();
+  }, [user]);
 
   useEffect(() => {
     const handler = () => setRoute(parseRoute());
@@ -187,6 +192,12 @@ function Shell() {
 
 function Profile() {
   const { pref, set } = useTheme();
+  const [synced, setSynced] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    vaultProviders().then((list) => setSynced(new Set(list)));
+  }, []);
+
   return (
     <>
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', color: 'var(--ink-strong)', marginBottom: '1.5rem' }}>Profile</h1>
@@ -194,11 +205,11 @@ function Profile() {
       {/* AI Keys */}
       <SectionCard title="AI Provider Keys">
         <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-          Add your API key for any provider to use VibeCode. Keys are stored locally in your browser.
+          Add your API key for any provider to use VibeCode. Keys are encrypted and synced to your account, so they follow you across devices.
         </p>
         <div className="flex flex-col gap-3">
           {PROVIDERS.map((p) => (
-            <ProviderKeyCard key={p.type} provider={p} />
+            <ProviderKeyCard key={p.type} provider={p} synced={synced.has(p.type)} />
           ))}
         </div>
       </SectionCard>
@@ -249,14 +260,21 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
-function ProviderKeyCard({ provider }: { provider: ProviderConfig }) {
+function ProviderKeyCard({ provider, synced }: { provider: ProviderConfig; synced?: boolean }) {
   const [keyValue, setKeyValue] = useState('');
   const [saved, setSaved] = useState(() => !!getKey(provider.type));
+  const [isSynced, setIsSynced] = useState(!!synced);
+
+  useEffect(() => {
+    if (synced) setIsSynced(true);
+  }, [synced]);
 
   const handleSave = () => {
     if (keyValue.trim()) {
       saveKey(provider.type, keyValue.trim());
+      vaultSet(provider.type, keyValue.trim());
       setSaved(true);
+      setIsSynced(true);
       setKeyValue('');
     }
   };
@@ -264,7 +282,9 @@ function ProviderKeyCard({ provider }: { provider: ProviderConfig }) {
   const handleDelete = () => {
     if (!confirm(`Remove ${provider.name} key?`)) return;
     saveKey(provider.type, '');
+    vaultDelete(provider.type);
     setSaved(false);
+    setIsSynced(false);
   };
 
   return (
@@ -272,7 +292,7 @@ function ProviderKeyCard({ provider }: { provider: ProviderConfig }) {
       <div className="flex items-center justify-between" style={{ marginBottom: '0.35rem' }}>
         <div className="flex items-center gap-2">
           <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--ink-strong)' }}>{provider.name}</span>
-          {saved && <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>&#9679; Key set</span>}
+          {saved && <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>&#9679; Key set{isSynced ? ' · synced' : ''}</span>}
         </div>
         <a href={provider.docsUrl} target="_blank" rel="noopener" style={{ fontSize: '0.75rem', color: 'var(--accent)', padding: '0.25rem 0', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>
           Get key &#8594;

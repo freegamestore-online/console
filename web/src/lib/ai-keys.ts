@@ -88,6 +88,67 @@ export function getKey(provider: string): string {
   return getSavedKeys()[provider] || '';
 }
 
+// ── Server-side key vault (auth worker) ──
+// Keys are encrypted at rest and synced across devices. localStorage stays the
+// working store so getKey() is synchronous; the vault hydrates it on load.
+
+const AUTH_URL = 'https://auth.freegamestore.online';
+
+export async function vaultProviders(): Promise<string[]> {
+  try {
+    const r = await fetch(`${AUTH_URL}/vault`, { credentials: 'include' });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return Array.isArray(d.providers) ? d.providers : [];
+  } catch {
+    return [];
+  }
+}
+
+export function vaultSet(provider: string, key: string) {
+  return fetch(`${AUTH_URL}/vault/set`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, key }),
+  }).catch(() => {});
+}
+
+export async function vaultGet(provider: string): Promise<string | null> {
+  try {
+    const r = await fetch(`${AUTH_URL}/vault/get`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.key ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function vaultDelete(provider: string) {
+  return fetch(`${AUTH_URL}/vault/delete`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
+  }).catch(() => {});
+}
+
+/** Pull any vault keys not already present locally, so getKey() stays sync. */
+export async function hydrateKeysFromVault(): Promise<void> {
+  const providers = await vaultProviders();
+  for (const p of providers) {
+    if (getKey(p)) continue;
+    const key = await vaultGet(p);
+    if (key) saveKey(p, key);
+  }
+}
+
 export function getDefaultProvider(): string {
   const stored = localStorage.getItem('fgs_provider');
   if (stored && PROVIDERS.some((p) => p.type === stored)) return stored;
