@@ -28,11 +28,6 @@ interface QualityScore {
 
 type View = 'games' | 'game-detail' | 'chat' | 'profile';
 
-const TABS: { key: View; label: string }[] = [
-  { key: 'games', label: 'My Games' },
-  { key: 'profile', label: 'Profile' },
-];
-
 function parseRoute(): { view: View; id: string | null } {
   const path = location.pathname;
   const gameMatch = path.match(/^\/games\/([^/]+)/);
@@ -73,6 +68,8 @@ export default function App() {
   const [quality, setQuality] = useState<Map<string, QualityScore>>(new Map());
   const [theme, setTheme] = useState(() => localStorage.getItem('stores-theme') ?? 'system');
   const [vibeCodeGameId, setVibeCodeGameId] = useState<string | null>(null);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const avatarRef = useRef<HTMLDivElement>(null);
   const loadGamesRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -84,6 +81,16 @@ export default function App() {
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
   }, []);
+
+  // Close avatar menu when clicking outside it
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) setAvatarMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [avatarMenuOpen]);
 
   // Auth
   useEffect(() => {
@@ -147,6 +154,11 @@ export default function App() {
     document.documentElement.dataset.theme = isDark ? 'dark' : '';
   };
 
+  const cycleTheme = () => {
+    const order = ['system', 'light', 'dark'];
+    applyTheme(order[(order.indexOf(theme) + 1) % order.length]!);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ minHeight: '100svh' }}>
@@ -202,39 +214,63 @@ export default function App() {
           flexShrink: 0,
         }}
       >
-        <div className="flex items-center gap-0">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => navigate(tab.key)}
-              style={{
-                padding: '0 0.75rem',
-                fontSize: '0.85rem',
-                fontWeight: activeTab === tab.key ? 700 : 500,
-                background: 'none',
-                border: 'none',
-                color: activeTab === tab.key ? 'var(--ink-strong)' : 'var(--muted)',
-                cursor: 'pointer',
-                fontFamily: activeTab === tab.key ? 'var(--font-display)' : 'var(--font-body)',
-                height: 44,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-3">
-          <a href="https://freegamestore.online" style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+        {/* Brand */}
+        <button
+          onClick={() => navigate('games')}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--ink-strong)' }}
+        >
+          Free<span style={{ color: 'var(--accent)' }}>GameStore</span>
+        </button>
+
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate('games')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.82rem', fontWeight: activeTab === 'games' ? 700 : 500, color: activeTab === 'games' ? 'var(--ink)' : 'var(--muted)', fontFamily: 'var(--font-body)' }}
+          >
+            My Games
+          </button>
+          <a href="https://freegamestore.online" style={{ fontSize: '0.82rem', color: 'var(--muted)', fontFamily: 'var(--font-body)' }}>
             Store
           </a>
-          <img src={user.avatar} alt="" width={24} height={24} style={{ borderRadius: '50%' }} />
           <button
-            onClick={signOut}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--muted)', fontFamily: 'var(--font-body)' }}
+            onClick={cycleTheme}
+            title={`Theme: ${theme}`}
+            aria-label={`Theme: ${theme}`}
+            style={{ width: 30, height: 30, borderRadius: '999px', border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--ink)', cursor: 'pointer', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >
-            Sign out
+            <span aria-hidden>{theme === 'dark' ? '☽' : theme === 'light' ? '☀︎' : '◑'}</span>
           </button>
+
+          {/* Avatar + dropdown menu */}
+          <div ref={avatarRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setAvatarMenuOpen((o) => !o)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
+            >
+              <img src={user.avatar} alt={user.name} width={28} height={28} style={{ borderRadius: '50%', border: `2px solid ${avatarMenuOpen ? 'var(--accent)' : 'var(--line)'}` }} />
+            </button>
+            {avatarMenuOpen && (
+              <div style={{ position: 'absolute', right: 0, marginTop: 8, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '0.75rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', width: 200, zIndex: 100, padding: '0.4rem 0', overflow: 'hidden' }}>
+                <div style={{ padding: '0.5rem 0.85rem', borderBottom: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Google</div>
+                </div>
+                <button
+                  onClick={() => { setAvatarMenuOpen(false); navigate('profile'); }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.85rem', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--ink)', fontFamily: 'var(--font-body)' }}
+                >
+                  Profile
+                </button>
+                <div style={{ borderTop: '1px solid var(--line)', margin: '0.25rem 0' }} />
+                <button
+                  onClick={() => { setAvatarMenuOpen(false); signOut(); }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.85rem', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--error)', fontFamily: 'var(--font-body)' }}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

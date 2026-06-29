@@ -12,6 +12,18 @@ export interface ProviderConfig {
 
 export const PROVIDERS: ProviderConfig[] = [
   {
+    type: 'openai',
+    name: 'OpenAI',
+    description: 'GPT and o-series models directly. Most users already have a key.',
+    keyPlaceholder: 'sk-proj-...',
+    free: false,
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+    ],
+    docsUrl: 'https://platform.openai.com/api-keys',
+  },
+  {
     type: 'openrouter',
     name: 'OpenRouter',
     description: '367+ models with one API key. Claude, GPT, Gemini, and more.',
@@ -38,18 +50,6 @@ export const PROVIDERS: ProviderConfig[] = [
       { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
     ],
     docsUrl: 'https://console.anthropic.com/settings/keys',
-  },
-  {
-    type: 'openai',
-    name: 'OpenAI',
-    description: 'GPT and o-series models directly.',
-    keyPlaceholder: 'sk-proj-...',
-    free: false,
-    models: [
-      { id: 'gpt-4o', name: 'GPT-4o' },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-    ],
-    docsUrl: 'https://platform.openai.com/api-keys',
   },
   {
     type: 'google',
@@ -91,12 +91,12 @@ export function getKey(provider: string): string {
 export function getDefaultProvider(): string {
   const stored = localStorage.getItem('fgs_provider');
   if (stored && PROVIDERS.some((p) => p.type === stored)) return stored;
-  return 'openrouter';
+  return 'openai';
 }
 
 export function getDefaultModel(): string {
   const p = getDefaultProvider();
   const stored = localStorage.getItem('fgs_model');
   const valid = MODEL_OPTIONS[p]?.some((m) => m.value === stored);
-  return valid ? stored! : MODEL_OPTIONS[p]?.[0]?.value || 'anthropic/claude-sonnet-4';
+  return valid ? stored! : MODEL_OPTIONS[p]?.[0]?.value || 'gpt-4o';
 }
